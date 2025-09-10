@@ -1,5 +1,3 @@
-local PokemonReader = {}
-
 -- Monte Carlo configuration
 local MONTE_CARLO_TOTAL_ITERATIONS = 10000  -- Total iterations per calculation
 local MONTE_CARLO_ITERATIONS_PER_FRAME = 100  -- Iterations per frame to prevent lag
