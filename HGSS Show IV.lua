@@ -2,7 +2,7 @@ local PokemonReader = {}
 
 -- Monte Carlo configuration
 local MONTE_CARLO_TOTAL_ITERATIONS = 10000  -- Total iterations per calculation
-local MONTE_CARLO_ITERATIONS_PER_FRAME = 500  -- Iterations per frame to prevent lag
+local MONTE_CARLO_ITERATIONS_PER_FRAME = 100  -- Iterations per frame to prevent lag
 
 -- Persistence configuration
 local savedDataFolder = "savedData"
@@ -253,6 +253,12 @@ local function createPokemonReader()
             decryptedData.move3,
             decryptedData.move4
         }
+        decryptedData.movePPs = {
+            decryptedData.move1PP,
+            decryptedData.move2PP,
+            decryptedData.move3PP,
+            decryptedData.move4PP
+        }
         decryptedData.stats = {
             HP = decryptedData.HP,
             ATK = decryptedData.ATK,
@@ -280,8 +286,13 @@ local function createPokemonReader()
                 SPA = getBits(ivValue, 20, 5),
                 SPD = getBits(ivValue, 25, 5)
             }
+            decryptedData.isEgg = getBits(ivValue, 30, 1) == 1
+            decryptedData.isNicknamed = getBits(ivValue, 31, 1) == 1
         end
         
+        local fourBytes = bit.band(decryptedData.experience2, 0x0000FFFF)
+        fourBytes = bit.lshift(fourBytes, 16)
+        decryptedData.experience = fourBytes + decryptedData.experience1
     end
 
     -- Public functions
@@ -327,8 +338,14 @@ local function createPokemonReader()
         decryptBattleStats(battleStatStart)
         
         formatData()
+
+        -- Basic validation
+        local sum = 0
+        for _, moveID in pairs(decryptedData.moveIDs) do
+            sum = sum + moveID
+        end
         
-        if not decryptedData.moveIDs or #decryptedData.moveIDs == 0 then
+        if sum == 0 then
             return {}
         end
 
@@ -372,9 +389,11 @@ local function validPokemonData(pokemonData)
         return false
     end
     
+    -- Sometimes the player's pokemon stats are just wildly out of bounds, need a sanity check.
     local STAT_LIMIT = 2000
     local statsToCheck = {}
     
+    -- Check if stats exist before accessing them
     if pokemonData.curHP then
         table.insert(statsToCheck, pokemonData.curHP)
     end
@@ -394,13 +413,35 @@ local function validPokemonData(pokemonData)
         end
     end
     
+    -- Basic validation without external data tables
     local id = tonumber(pokemonData.pokemonID)
-    if id == nil or id < 0 or id > 493 then
+    local heldItem = tonumber(pokemonData.heldItem)
+    
+    -- Check basic ranges for Gen 4
+    if id == nil or id < 0 or id > 493 then  -- Gen 4 has Pokemon IDs 1-493
         return false
     end
     
     if pokemonData.level and pokemonData.level > 100 then
         return false
+    end
+    
+    if heldItem and heldItem > 650 then
+        return false
+    end
+    
+    -- Check ability is within reasonable range for Gen 4
+    if pokemonData.ability and (pokemonData.ability < 0 or pokemonData.ability > 164) then  -- Gen 4 abilities 1-164
+        return false
+    end
+    
+    -- Check moves are within reasonable range for Gen 4
+    if pokemonData.moveIDs then
+        for _, move in pairs(pokemonData.moveIDs) do
+            if move and (move < 0 or move > 467) then  -- Gen 4 moves 1-467
+                return false
+            end
+        end
     end
     
     return true
@@ -493,9 +534,6 @@ local function fileExists(path)
     end
 end
 
-local function ensureDirectoryExists(dirPath)
-    os.execute("mkdir \"" .. dirPath .. "\" 2>nul")
-end
 
 local function parseAllBSTFromLogFile(logFilePath)
 	if not logFilePath or not fileExists(logFilePath) then
@@ -611,22 +649,23 @@ local function matchingIVs(statName, observed, base, ev, level, nature)
     local valid = {}
     if statName == "HP" then
         for iv = 0, 31 do
-            local calc = math.floor(((2 * base + iv + math.floor(ev / 4) + 100) * level) / 100) + 10
+            local calc = math.floor(((2 * base + iv + math.floor(ev / 4)) * level) / 100) + level + 10
             if calc == observed then
                 table.insert(valid, iv)
             end
         end
     else
         for iv = 0, 31 do
-            local raw = math.floor(((2 * base + iv + math.floor(ev / 4)) * level) / 100) + 5
-            raw = math.floor(raw * nature)
-            if raw == observed then
+            local intermediate = math.floor(((2 * base + iv + math.floor(ev / 4)) * level) / 100) + 5
+            local calc = math.floor(intermediate * nature)
+            if calc == observed then
                 table.insert(valid, iv)
             end
         end
     end
     return valid
 end
+
 
 local function startMonteCarloCalculation(pokemonData)
     monteCarloState.active = true
@@ -748,7 +787,6 @@ local function getIntervalKey(pokemonData)
 end
 
 local function saveIntervalData()
-    ensureDirectoryExists(savedDataFolder)
     local saveFilePath = savedDataFolder .. "\\" .. gameinfo.getromname() .. ".dat"
     
     local file = io.open(saveFilePath, "w")
