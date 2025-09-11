@@ -21,13 +21,15 @@ local config = {
     screenScaleY = 27, --depending on the game size screen
    
     -- Max distance to show items and trainers
-    maxDistanceShow = 8
+    maxDistanceShow = 8,
+    showOffscreenItems = true,
+    showOffscreenTrainers = true,
 }
 
 -- Memory addresses (updated with discovered map ID method)
 local addresses = {
     -- Map ID discovery (ARM9 System Bus method)
-    mapPointerAddress = 0x21118A0,  -- Pointer location in ARM9 System Bus
+    mapPointerAddress = 0x21118A0,  -- Pointer location in ARM9 System Bus -- US: 0x2111880
     mapIdOffset = 0x1244,          -- Offset to add to the pointer value
     
     
@@ -35,10 +37,10 @@ local addresses = {
     playerXOffset = 0x124C,    
     playerYOffset = 0x1250, 
 
-    flagBaseAddress = 0x021118A0,
+    flagBaseAddress = 0x021118A0, -- US: 0x02111880
     flagOffset = 0x10D4,
 
-    inFightAddress = 0x02246F48
+    inFightAddress = 0x02246F48 -- US: 0x02246F28
 }
 
 -- Current game state
@@ -359,10 +361,24 @@ local function calculatePositions()
             local deltaX = item.x - gameState.playerX
             local deltaY = item.y - gameState.playerY
             
-            if math.abs(deltaX) <= config.maxDistanceShow and math.abs(deltaY) <= config.maxDistanceShow then
+            if not config.showOffscreenItems and (math.abs(deltaX) > config.maxDistanceShow or math.abs(deltaY) > config.maxDistanceShow) then
+                --skip this item
+            else
+
+                if math.abs(deltaX) > config.maxDistanceShow then
+                    deltaX = config.maxDistanceShow * deltaX / math.abs(deltaX)
+                end
+                if math.abs(deltaY) > config.maxDistanceShow then
+                    deltaY = config.maxDistanceShow * deltaY / math.abs(deltaY)
+                end
+
                 local screenX = config.screenXOffset + (deltaX * config.screenScaleX)  -- Scale up for visibility
                 local screenY = config.screenYOffset + (deltaY * config.screenScaleY) -- Scale up for visibility
                 
+                if(screenY < 0) then
+                    screenY = screenY+10
+                end
+
                 table.insert(gameState.cachedItemPositions, {
                     screenX = screenX,
                     screenY = screenY,
@@ -373,20 +389,33 @@ local function calculatePositions()
     end
     
     if gameState.trainers then
-        for i, trainer in ipairs(gameState.trainers) do
+    for i, trainer in ipairs(gameState.trainers) do
 
-                local deltaX = trainer.x - gameState.playerX
-                local deltaY = trainer.y - gameState.playerY
+            local deltaX = trainer.x - gameState.playerX
+            local deltaY = trainer.y - gameState.playerY
+            
+            if not config.showOffscreenTrainers and (math.abs(deltaX) > config.maxDistanceShow or math.abs(deltaY) > config.maxDistanceShow) then
+                --skip this trainer
+            else
+
+                if math.abs(deltaX) > config.maxDistanceShow then
+                    deltaX = config.maxDistanceShow * deltaX / math.abs(deltaX)
+                end
+                if math.abs(deltaY) > config.maxDistanceShow then
+                    deltaY = config.maxDistanceShow * deltaY / math.abs(deltaY)
+                end
+                local screenX = config.screenXOffset + (deltaX * config.screenScaleX)  -- Scale up for visibility
+                local screenY = config.screenYOffset + (deltaY * config.screenScaleY)   -- Scale up for visibility
                 
-                if math.abs(deltaX) <= config.maxDistanceShow and math.abs(deltaY) <= config.maxDistanceShow then
-                    local screenX = config.screenXOffset + (deltaX * config.screenScaleX)  -- Scale up for visibility
-                    local screenY = config.screenYOffset + (deltaY * config.screenScaleY)   -- Scale up for visibility
-                    
-                    table.insert(gameState.cachedTrainerPositions, {
-                        screenX = screenX,
-                        screenY = screenY,
-                        trainer = trainer            
-                    })
+                if(screenY < 0) then
+                    screenY = screenY+10
+                end
+
+                table.insert(gameState.cachedTrainerPositions, {
+                    screenX = screenX,
+                    screenY = screenY,
+                    trainer = trainer            
+                })
             end
         end
     end
