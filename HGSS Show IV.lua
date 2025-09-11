@@ -885,6 +885,7 @@ local function refineIntervalEstimate(pokemonData, newEstimate)
         MaxIV = updatedMaxBound,
     }
 end
+
 local function draw_pokemon_stats()
 
     local inputs = joypad.get()
@@ -1012,11 +1013,11 @@ local function draw_pokemon_stats()
     end
 end
 
-local current_rom 
+local current_rom
 local dataLoaded = false
 
 while true do
-
+    
     if(gameinfo.getromhash() ~= nil and gameinfo.getromhash() ~= "" and gameinfo.getromhash() ~= current_rom) then
         current_rom = gameinfo.getromhash()
         InitBST()
@@ -1026,8 +1027,10 @@ while true do
             dataLoaded = true
         end
     end
-    if current_rom ~= "" then
+    if current_rom ~= nil and current_rom ~= "" then
         draw_pokemon_stats()
     end
+
+
     emu.frameadvance()
 end
