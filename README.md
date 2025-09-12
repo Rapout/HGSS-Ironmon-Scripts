@@ -8,7 +8,6 @@
    ├── eventFiles/
    ├── mapToEvent/
    ├── utils/
-   ├── savedData/
    └── [fichiers de script]
    ```
 3. Charger les scripts individuels via la Console Lua de BizHawk (glissé-déposé ou Script -> Open Scripts dans la Console Lua)
@@ -20,8 +19,8 @@
 | Script | Objectif |
 |--------|----------|
 | **HGSS No Encounter** | Activer/désactiver les rencontres de Pokémon sauvages |
-| **HGSS Show IV** | Afficher les IV, EV et puissance des Pokémon (estimations ou exacte) |
-| **GUI Configurator** | Positionner et sauvegarder les emplacements des éléments GUI pour HGSS No Encounter, HGSS Show IV, et HGSS Items Alerts |
+| **HGSS Show IV** | Afficher les IV, EV et statistiques des Pokémon |
+| **GUI Configurator** | Positionner et sauvegarder les emplacements des éléments GUI pour HGSS No Encounter et HGSS Show IV |
 | **ShowHiddenItemsAndTrainers** | Afficher les objets cachés et les emplacements des dresseurs |
 | **HGSS Items Alerts** | Afficher les items importants récoltés |
 ## Détails des Scripts
@@ -44,7 +43,7 @@
 
 ### HGSS Show IV
 
-**Objectif** : Affiche des statistiques détaillées ou une estimation des Pokémon incluant les Valeurs Individuelles (IV), les Valeurs d'Effort (EV), la puissance estimée et les informations sur Puissance Cachée. L'estimation s'affine au fur et a mesure des niveaux. 
+**Objectif** : Affiche des statistiques détaillées ou une estimation des Pokémon incluant les Valeurs Individuelles (IV), les Valeurs d'Effort (EV), les totaux de statistiques de base et les informations sur la Puissance Cachée.
 
 **Commandes** :
 - `Select + Droite` : Bascule entre afficher/masquer les informations détaillées des IV
@@ -61,7 +60,7 @@
 
 **Quand les IV sont masqués** :
 - EV seulement
-- IV moyens estimés (s'affine a chaque niveau gagné)
+- IV moyens estimés
 - Puissance totale estimée (Stats de Base + bonus IV estimés)
 
 **Code Couleur** :
@@ -104,7 +103,6 @@
 **Affichage** :
 - **Points jaunes ("o")** : Objets cachés qui n'ont pas été collectés
 - **Points rouges ("o")** : Dresseurs qui n'ont pas été battus
-- Affiche seulement les objets/dresseurs dans un rayon de 8 cases
 
 **Fonctionnalités** :
 - Lit automatiquement les données de carte depuis les fichiers events
