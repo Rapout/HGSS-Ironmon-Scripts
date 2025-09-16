@@ -1,12 +1,22 @@
 local map_to_event = require("mapToEvent/map_to_event")
 
 local config = {
+
+    showHiddenItems = true,
+    showTrainers = true,
+    showItems = true,
+
+    showOffscreenHiddenItems = true,
+    showOffscreenTrainers = true,
+    showOffscreenItems = true,
+
     -- event files directory
     eventDataPath = "eventFiles",
     
     -- Display settings
-    itemColor = "yellow",   -- Color for hidden items
+    hiddenItemColor = "yellow",   -- Color for hidden items
     trainerColor = "red",   -- Color for trainers
+    itemColor = "lightblue",   -- Color for items
     
     -- Memory domains
     armDomain = "ARM9 System Bus",
@@ -22,8 +32,6 @@ local config = {
    
     -- Max distance to show items and trainers
     maxDistanceShow = 8,
-    showOffscreenItems = true,
-    showOffscreenTrainers = true,
 }
 
 -- Memory addresses (updated with discovered map ID method)
@@ -52,13 +60,15 @@ local gameState = {
     mapData = nil,
     hiddenItems = {},
     trainers = {},
+    items = {},
     -- Caching variables
     lastMapId = -1,
     lastPlayerX = -1,
     lastPlayerY = -1,
     -- Cached screen positions for items and trainers
-    cachedItemPositions = {},
+    cachedHiddenItemPositions = {},
     cachedTrainerPositions = {},
+    cachedItemPositions = {},
     needsRecalculate = false
 }
 
@@ -84,7 +94,6 @@ local DSPRE_CONSTANTS = {
     -- Overworld types
     OVERWORLD_TYPE_NORMAL = 0,
     OVERWORLD_TYPE_TRAINER = 1,
-    OVERWORLD_TYPE_ITEM = 3,
     
     -- Map size constant
     MAP_SIZE = 32,           -- mapSize constant used in coordinate calculations
@@ -240,7 +249,7 @@ local function parseDSPREEventFile(data)
     end
     
     local trainers = {}
-    
+    local items = {}
     -- Parse Overworlds (look for trainers only)
     for i = 0, overworldCount - 1 do
         if overworldOffset + DSPRE_CONSTANTS.OVERWORLD_SIZE <= #data then
@@ -260,7 +269,7 @@ local function parseDSPREEventFile(data)
             local yPosition = readU16LE(data, overworldOffset + 26)
             local zPosition = readU32LE(data, overworldOffset + 28)
             
-            -- Only process trainers (type 1)
+            
             if overworldType == DSPRE_CONSTANTS.OVERWORLD_TYPE_TRAINER then
                 local xMapPosition = xPosition % DSPRE_CONSTANTS.MAP_SIZE
                 local xMatrixPosition = math.floor(xPosition / DSPRE_CONSTANTS.MAP_SIZE)
@@ -284,6 +293,26 @@ local function parseDSPREEventFile(data)
                     zPosition = zPosition,
                     trainerInfo = string.format("Trainer ID %d", owID)
                 })
+
+            elseif scriptNumber >= 7000 and scriptNumber < 7254 then --items scriptNumber are set between 7000 and 7254
+                local xMapPosition = xPosition % DSPRE_CONSTANTS.MAP_SIZE
+                local xMatrixPosition = math.floor(xPosition / DSPRE_CONSTANTS.MAP_SIZE)
+                local yMapPosition = yPosition % DSPRE_CONSTANTS.MAP_SIZE
+                local yMatrixPosition = math.floor(yPosition / DSPRE_CONSTANTS.MAP_SIZE)
+
+                table.insert(items, {
+                    x = xPosition,
+                    y = yPosition,
+                    xMap = xMapPosition,
+                    yMap = yMapPosition,
+                    xMatrix = xMatrixPosition,
+                    yMatrix = yMatrixPosition,
+                    owID = owID,
+                    overlayTableEntry = overlayTableEntry,
+                    flag = flag,
+                    scriptNumber = scriptNumber,
+                    zPosition = zPosition,
+                })
             end
         else
             break
@@ -291,7 +320,7 @@ local function parseDSPREEventFile(data)
         overworldOffset = overworldOffset + DSPRE_CONSTANTS.OVERWORLD_SIZE
     end
     
-    return hiddenItems, trainers
+    return hiddenItems, trainers, items
 end
 
 local function loadMapData(mapId)
@@ -311,10 +340,11 @@ local function loadMapData(mapId)
     
     local eventData = readBinaryFile(eventFilePath)
     if eventData then
-        local hiddenItems, trainers = parseDSPREEventFile(eventData)
+        local hiddenItems, trainers, items = parseDSPREEventFile(eventData)
         return {
             hiddenItems = hiddenItems,
             trainers = trainers,
+            items = items,
             eventId = eventId,
             eventFilePath = eventFileName
         }
@@ -322,6 +352,7 @@ local function loadMapData(mapId)
         return {
             hiddenItems = {},
             trainers = {},
+            items = {},
             eventId = eventId,
             eventFilePath = "File not found: " .. eventFileName
         }
@@ -349,19 +380,23 @@ local function isTrainerDefeated(trainerScript)
     local flagNumber = 0x550 + trainerId
     return checkFlag(flagNumber)
 end
+
+local function isItemCollected(flag)
+    return checkFlag(flag)
+end
     
 -- Calculate screen positions for items and trainers (only when player moves)
 local function calculatePositions()
-    gameState.cachedItemPositions = {}
+    gameState.cachedHiddenItemPositions = {}
     gameState.cachedTrainerPositions = {}
-    
+    gameState.cachedItemPositions = {}
     if gameState.hiddenItems then
         for i, item in ipairs(gameState.hiddenItems) do
 
             local deltaX = item.x - gameState.playerX
             local deltaY = item.y - gameState.playerY
             
-            if not config.showOffscreenItems and (math.abs(deltaX) > config.maxDistanceShow or math.abs(deltaY) > config.maxDistanceShow) then
+            if not config.showOffscreenHiddenItems and (math.abs(deltaX) > config.maxDistanceShow or math.abs(deltaY) > config.maxDistanceShow) then
                 --skip this item
             else
 
@@ -379,7 +414,7 @@ local function calculatePositions()
                     screenY = screenY+10
                 end
 
-                table.insert(gameState.cachedItemPositions, {
+                table.insert(gameState.cachedHiddenItemPositions, {
                     screenX = screenX,
                     screenY = screenY,
                     item = item            
@@ -419,6 +454,37 @@ local function calculatePositions()
             end
         end
     end
+
+    if gameState.items then
+        for i, item in ipairs(gameState.items) do
+            local deltaX = item.x - gameState.playerX
+            local deltaY = item.y - gameState.playerY
+            
+            if not config.showOffscreenItems and (math.abs(deltaX) > config.maxDistanceShow or math.abs(deltaY) > config.maxDistanceShow) then
+                --skip this item
+            else
+
+                if math.abs(deltaX) > config.maxDistanceShow then
+                    deltaX = config.maxDistanceShow * deltaX / math.abs(deltaX)
+                end
+                if math.abs(deltaY) > config.maxDistanceShow then
+                    deltaY = config.maxDistanceShow * deltaY / math.abs(deltaY)
+                end
+                local screenX = config.screenXOffset + (deltaX * config.screenScaleX)  -- Scale up for visibility
+                local screenY = config.screenYOffset + (deltaY * config.screenScaleY)   -- Scale up for visibility
+                
+                if(screenY < 0) then
+                    screenY = screenY+10
+                end
+
+                table.insert(gameState.cachedItemPositions, {
+                    screenX = screenX,
+                    screenY = screenY,
+                    item = item            
+                })
+            end
+        end
+    end
 end
 
 local function updateMapData()
@@ -429,6 +495,7 @@ local function updateMapData()
             gameState.mapData.mapId = gameState.currentMapId
             gameState.hiddenItems = gameState.mapData.hiddenItems or {}
             gameState.trainers = gameState.mapData.trainers or {}
+            gameState.items = gameState.mapData.items or {}
         end
         gameState.lastMapId = gameState.currentMapId
         calculatePositions()
@@ -436,13 +503,13 @@ local function updateMapData()
 end
 
 local function drawHiddenItems()
-    if not gameState.cachedItemPositions then 
+    if not gameState.cachedHiddenItemPositions then 
         return 
     end
     
-    for _, cachedItem in ipairs(gameState.cachedItemPositions) do
+    for _, cachedItem in ipairs(gameState.cachedHiddenItemPositions) do
         if not isHiddenItemCollected(cachedItem.item.scriptNumber) then
-            gui.text(cachedItem.screenX, cachedItem.screenY, "o", config.itemColor)
+            gui.text(cachedItem.screenX, cachedItem.screenY, "o", config.hiddenItemColor)
         end
     end
 end
@@ -458,6 +525,19 @@ local function drawTrainers()
         end
     end
 end
+
+local function drawItems()
+    if not gameState.cachedItemPositions then 
+        return 
+    end
+    
+    for _, cachedItem in ipairs(gameState.cachedItemPositions) do
+        if not isItemCollected(cachedItem.item.flag) then
+            gui.text(cachedItem.screenX, cachedItem.screenY, "o", config.itemColor)
+        end
+    end
+end
+
 
 
 local function isInFight()
@@ -492,8 +572,15 @@ local function update()
     
     updateMapData()
     
-    drawHiddenItems()  
-    drawTrainers()    
+    if config.showHiddenItems then
+        drawHiddenItems()
+    end
+    if config.showTrainers then
+        drawTrainers()
+    end
+    if config.showItems then
+        drawItems()
+    end
 
 end
 
