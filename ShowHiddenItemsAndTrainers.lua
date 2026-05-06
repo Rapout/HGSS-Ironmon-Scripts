@@ -1,4 +1,4 @@
-local map_to_event = require("mapToEvent/map_to_event")
+local map_to_event = dofile("mapToEvent/map_to_event.lua")
 
 local config = {
 
